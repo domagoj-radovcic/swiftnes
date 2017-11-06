@@ -10,9 +10,9 @@ import Foundation;
 
 class Cartridge {
   
-  var cpu: CPU?;
+  var cpu: CPU!;
   
-  var mapper: IMapper?;
+  var mapper: IMapper!;
   
   var header: [Int];
   

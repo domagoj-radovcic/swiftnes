@@ -8,7 +8,7 @@
 
 protocol IMapper {
   
-  var cartridge: Cartridge? { get set }
+  var cartridge: Cartridge! { get set }
   
   func loadPRG ();
   

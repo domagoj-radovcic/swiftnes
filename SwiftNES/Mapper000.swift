@@ -8,7 +8,7 @@
 
 class Mapper000: IMapper {
   
-  var cartridge: Cartridge?;
+  var cartridge: Cartridge!;
   
   init () {
     cartridge = nil;
@@ -20,11 +20,11 @@ class Mapper000: IMapper {
   
   func loadPRG () {
     if (cartridge!.PRG_ROM_SIZE > 1) {
-      switchPRGbank((cartridge?.cpu?.ram)!, 0, 0x8000);
-      switchPRGbank((cartridge?.cpu?.ram)!, 1, 0xC000);
+      switchPRGbank(cartridge!.cpu!.ram, 0, 0x8000);
+      switchPRGbank(cartridge!.cpu!.ram, 1, 0xC000);
     } else {
-      switchPRGbank((cartridge?.cpu?.ram)!, 0, 0x8000);
-      switchPRGbank((cartridge?.cpu?.ram)!, 0, 0xC000);
+      switchPRGbank(cartridge!.cpu!.ram, 0, 0x8000);
+      switchPRGbank(cartridge!.cpu!.ram, 0, 0xC000);
     }
   }
   

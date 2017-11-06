@@ -8,10 +8,18 @@
 
 import Foundation;
 
+public enum IRQType {
+  case IRQ_NONE,
+    IRQ_NORMAL,
+    IRQ_NMI,
+    IRQ_RESET
+}
+
 public class CPU {
   
   // registers
   var PC: Int;
+  var PCTemp: Int;
   var SP: Int;
   var REG_X: Int;
   var REG_Y: Int;
@@ -22,8 +30,10 @@ public class CPU {
   var F_Overflow: Int;
   var F_Unused: Int;
   var F_Break: Int;
+  var F_BreakTemp: Int;
   var F_Decimal: Int;
   var F_InterruptDisable: Int;
+  var F_InterruptDisableTemp: Int;
   var F_Zero: Int;
   var F_Carry: Int;
   
@@ -33,13 +43,17 @@ public class CPU {
   // opcodes
   var cycles: Int;
   var instructionCount: Int;
-  var opcodeList: [OpCode?];
+  var opcodeList: [OpCode!];
   
   var address: Int;
-  var currentOpcode: OpCode?;
+  var currentOpcode: OpCode!;
+  
+  var irqRequested: Bool;
+  var irqType: IRQType;
 
   init () {
     PC = 0xC000;
+    PCTemp = 0xC000;
     SP = 0xFD;
     REG_A = 0;
     REG_X = 0;
@@ -47,8 +61,10 @@ public class CPU {
     F_Carry = (0x24 >> 0) & 1;
     F_Zero = (0x24 >> 1) & 1;
     F_InterruptDisable = (0x24 >> 2) & 1;
+    F_InterruptDisableTemp = (0x24 >> 2) & 1;
     F_Decimal = (0x24 >> 3) & 1;
     F_Break = (0x24 >> 4) & 1;
+    F_BreakTemp = (0x24 >> 4) & 1;
     F_Unused = 1;
     F_Overflow = (0x24 >> 6) & 1;
     F_Negative = (0x24 >> 7) & 1;
@@ -67,19 +83,85 @@ public class CPU {
     for (var i = 0x4000; i <= 0x400F; i++) {
       ram.write(i, 0x00);
     }
-    opcodeList = [OpCode?](count: 0x100, repeatedValue: nil);
+    opcodeList = [OpCode!](count: 0x100, repeatedValue: nil);
     address = 0x0000;
     currentOpcode = nil;
+    irqRequested = false;
+    irqType = IRQType.IRQ_NONE;
     generateOpCodes();
   }
   
   func emulate () {
+    if (irqRequested) {
+      PCTemp = PC;
+      F_InterruptDisableTemp = F_InterruptDisable;
+      switch (irqType) {
+      case .IRQ_NORMAL:
+        if (F_InterruptDisable != 0) {
+          break;
+        }
+        executeIRQ(getStatusFlags());
+        break;
+      case .IRQ_NMI:
+        executeNMI(getStatusFlags());
+        break;
+      case .IRQ_RESET:
+        break;
+      default:
+        executeReset();
+        break;
+      }
+      
+      PC = PCTemp;
+      F_InterruptDisable = F_InterruptDisableTemp;
+      F_Break = F_BreakTemp;
+      irqRequested = false;
+    }
+    
     currentOpcode = opcodeList[ram.read8(PC)];
     log();
     executeOpCode();
     cycles += currentOpcode!.cycles;
     PC += currentOpcode!.size;
     instructionCount++;
+  }
+  
+  func requestInterrupt (type: IRQType) {
+    if (irqRequested && type == .IRQ_NORMAL) {
+      return;
+    }
+    
+    irqRequested = true;
+    irqType = type;
+  }
+  
+  func executeIRQ (status: Int) {
+    PCTemp += 1;
+    ram.pushToStack(self, (PCTemp >> 8) & 0xFF);
+    ram.pushToStack(self, (PCTemp & 0xFF));
+    ram.pushToStack(self, status);
+    F_InterruptDisableTemp = 1;
+    F_BreakTemp = 0;
+    
+    PCTemp = ram.read8(0xFFFE) | (ram.read8(0xFFFF) << 8);
+    PCTemp -= 1;
+  }
+  
+  func executeNMI (status: Int) {
+    if ((ram.read8(0x2000) & 128) != 0) {
+      PCTemp += 1;
+      ram.pushToStack(self, (PCTemp >> 8) & 0xFF);
+      ram.pushToStack(self, (PCTemp & 0xFF));
+      ram.pushToStack(self, status);
+      
+      PCTemp = ram.read8(0xFFFA) | (ram.read8(0xFFFB) << 8);
+      PCTemp -= 1;
+    }
+  }
+  
+  func executeReset () {
+    PCTemp = ram.read8(0xFFFC) | (ram.read8(0xFFFD) << 8);
+    PCTemp -= 1;
   }
   
   func log() {
